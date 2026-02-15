@@ -34,3 +34,13 @@ title: My Page
 
 # My Page Content
 ```
+
+## Callouts
+
+{% callout type="tip" title="Hot tip" %}
+Use `bun run dev` during development for live reload.
+{% /callout %}
+
+{% callout type="warning" %}
+Make sure your `docs-src/layout.html` exists before running a build.
+{% /callout %}

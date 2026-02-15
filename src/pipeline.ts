@@ -6,8 +6,15 @@ import {
 } from "@zeix/cause-effect";
 import { mkdir } from "fs/promises";
 import { dirname, join, resolve } from "path";
+import { copyAssets } from "./asset-copier.ts";
+import { bundleComponents, type BundleResult } from "./bundler.ts";
 import type { DocsServerConfig } from "./config.ts";
-import { createFileList, type FileInfo } from "./file-watcher.ts";
+import {
+  createFileList,
+  type FileInfo,
+  type WatchedFileList,
+} from "./file-watcher.ts";
+import { hmrClientScript } from "./hmr-client.ts";
 import {
   generateNavHtml,
   renderPage,
@@ -19,6 +26,14 @@ import {
   type PageData,
 } from "./markdoc-pipeline.ts";
 import { resolveSchemas } from "./schema-resolver.ts";
+
+export interface PipelineOptions {
+  watch: boolean;
+  /** Called after pages are written to disk (dev mode HMR — content change) */
+  onPagesWritten?: () => void;
+  /** Called after CSS bundle is written to disk (dev mode HMR — CSS swap) */
+  onCssWritten?: (cssPath: string) => void;
+}
 
 export interface ReactivePipeline {
   build(): Promise<void>;
@@ -32,13 +47,15 @@ function pageDataToOutPath(page: PageData, outDir: string): string {
 
 export async function createPipeline(
   config: Store<DocsServerConfig>,
-  options: { watch: boolean },
+  options: PipelineOptions,
 ): Promise<ReactivePipeline> {
   const cwd = process.cwd();
   const srcDir = resolve(cwd, config.srcDir.get());
   const outDir = resolve(cwd, config.outDir.get());
   const schemaDir = resolve(cwd, config.schemaDir.get());
+  const componentsDir = resolve(cwd, config.componentsDir.get());
   const builtinSchemaDir = resolve(import.meta.dir, "schemas");
+  const isMinified = !options.watch;
 
   // Resolve schemas (built-in + user overrides)
   const schemas: MarkdocSchemaSet = await resolveSchemas(
@@ -46,10 +63,22 @@ export async function createPipeline(
     schemaDir,
   );
 
-  // Create watched file list for markdown sources
+  // Create watched file lists
   const mdFiles = await createFileList(srcDir, "**/*.md", undefined, {
     watch: options.watch,
   });
+  const componentFiles = await createFileList(
+    componentsDir,
+    "**/*.{ts,css}",
+    undefined,
+    { watch: options.watch },
+  );
+  const assetFiles = await createFileList(
+    join(srcDir, "assets"),
+    "**/*",
+    undefined,
+    { watch: options.watch },
+  );
 
   // Read layout file (async Task)
   const layoutTask = createTask(async () => {
@@ -71,6 +100,33 @@ export async function createPipeline(
     }
   });
 
+  // Bundle components (async Task — re-runs when component files change)
+  const bundleTask = createTask(async (): Promise<BundleResult> => {
+    // Read component file list to track as dependency
+    componentFiles.get();
+    try {
+      const result = await bundleComponents({
+        componentsDir,
+        outDir,
+        minify: isMinified,
+      });
+      if (result.jsPath) console.log(`  bundle → ${result.jsPath}`);
+      if (result.cssPath) console.log(`  bundle → ${result.cssPath}`);
+      return result;
+    } catch (err) {
+      console.error("Bundle error:", err);
+      return { jsPath: "", cssPath: "", jsHash: "", cssHash: "" };
+    }
+  });
+
+  // Copy static assets (async Task — re-runs when asset files change)
+  const assetTask = createTask(async (): Promise<true> => {
+    // Read asset file list to track as dependency
+    assetFiles.get();
+    await copyAssets(srcDir, outDir);
+    return true;
+  });
+
   // Derive page data from markdown files (sync — Markdoc is synchronous)
   const pageDataCollection = mdFiles.deriveCollection((file: FileInfo) =>
     processMarkdoc(file, schemas, srcDir),
@@ -82,39 +138,52 @@ export async function createPipeline(
     buildResolve = r;
   });
 
-  // Track disposables
+  let initialBuildDone = false;
   const disposables: (() => void)[] = [];
 
   // Terminal effect: write each rendered page to disk
+  //
+  // Read pageDataCollection BEFORE match() so mdFiles is tracked as a
+  // dependency on the first run. See IMPLEMENTATION_NOTES.md §1.
   const disposeWriteEffect = createEffect(() => {
-    match([layoutTask], {
-      ok: ([layoutHtml]) => {
-        // Build nav from page data
-        const pages: { slug: string; title: string }[] = [];
-        for (const signal of pageDataCollection) {
-          const page = signal.get();
-          pages.push({
-            slug: page.slug,
-            title: page.frontmatter.title || page.slug || "Home",
-          });
-        }
+    // Eagerly read all page data
+    const pages: PageData[] = [];
+    for (const signal of pageDataCollection) {
+      pages.push(signal.get());
+    }
+
+    match([layoutTask, bundleTask, assetTask], {
+      ok: ([_layoutHtml, bundle, _assets]) => {
+        const layoutHtml = _layoutHtml as string;
+        const navPages = pages.map((p) => ({
+          slug: p.slug,
+          title: p.frontmatter.title || p.slug || "Home",
+        }));
         const navHtml = generateNavHtml(
-          pages,
+          navPages,
           config.nav.get(),
           config.baseUrl.get(),
         );
 
+        const bundleResult = bundle as BundleResult;
         const renderOptions: RenderOptions = {
           title: config.title.get(),
           baseUrl: config.baseUrl.get(),
           navHtml,
+          cssPath: bundleResult.cssPath || undefined,
+          jsPath: bundleResult.jsPath || undefined,
+          isDev: options.watch,
         };
 
         const writePromises: Promise<void>[] = [];
 
-        for (const signal of pageDataCollection) {
-          const page = signal.get();
-          const html = renderPage(page, layoutHtml, renderOptions);
+        for (const page of pages) {
+          let html = renderPage(page, layoutHtml, renderOptions);
+
+          if (options.watch) {
+            html = html.replace("</body>", `${hmrClientScript}\n</body>`);
+          }
+
           const outPath = pageDataToOutPath(page, outDir);
           writePromises.push(
             mkdir(dirname(outPath), { recursive: true })
@@ -125,19 +194,22 @@ export async function createPipeline(
           );
         }
 
-        // Signal build completion after all writes
         Promise.all(writePromises).then(() => {
           if (buildResolve) {
             buildResolve();
             buildResolve = null;
           }
+          if (initialBuildDone && options.onPagesWritten) {
+            options.onPagesWritten();
+          }
+          initialBuildDone = true;
         });
       },
       nil: () => {
-        // Layout still loading
+        // Waiting for layout/bundle/assets to resolve
       },
       err: (errors) => {
-        console.error("Layout error:", errors[0]);
+        console.error("Pipeline error:", errors[0]);
         if (buildResolve) {
           buildResolve();
           buildResolve = null;
@@ -154,6 +226,9 @@ export async function createPipeline(
     },
     dispose() {
       for (const dispose of disposables) dispose();
+      (mdFiles as WatchedFileList).closeWatcher?.();
+      (componentFiles as WatchedFileList).closeWatcher?.();
+      (assetFiles as WatchedFileList).closeWatcher?.();
     },
   };
 }

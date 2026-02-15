@@ -7,6 +7,11 @@
       "bun": "./src/index.ts",
       "import": "./dist/index.js",
       "types": "./dist/index.d.ts"
+    },
+    "./components": {
+      "bun": "./src/components/index.ts",
+      "import": "./dist/components/index.js",
+      "types": "./dist/components/index.d.ts"
     }
   },
   "bin": {
@@ -19,6 +24,7 @@
   "dependencies": {
     "@markdoc/markdoc": "^0.5.4",
     "@zeix/cause-effect": "^0.18.1",
+    "@zeix/le-truc": "^0.15.0",
     "yaml": "^2.8.2"
   },
   "devDependencies": {
