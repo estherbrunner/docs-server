@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Getting Started — docs-server</title>
+  <meta name="description" content="How to set up docs-server for your project">
+</head>
+<body>
+  <header>
+    <nav>
+  <ul>
+    <li><a href="/">Home</a></li>
+    <li><a href="/getting-started/">Getting Started</a></li>
+  </ul>
+</nav>
+  </header>
+  <main>
+    <article><h1 id="getting-started">Getting Started</h1><p>Install docs-server as a dev dependency:</p><pre data-language="bash">bun add -d docs-server
+</pre><h2 id="configuration">Configuration</h2><p>Create a <code>docs-server.config.ts</code> in your project root:</p><pre data-language="typescript">export default {
+  title: 'My Library',
+  baseUrl: '/',
+  nav: ['index', 'getting-started'],
+}
+</pre><h2 id="writing-content">Writing Content</h2><p>Create markdown files in <code>docs-src/</code> with frontmatter:</p><pre data-language="markdown">---
+title: My Page
+---
+
+# My Page Content
+</pre></article>
+  </main>
+</body>
+</html>

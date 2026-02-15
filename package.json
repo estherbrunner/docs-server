@@ -1,0 +1,31 @@
+{
+  "name": "docs-server",
+  "version": "0.1.0",
+  "type": "module",
+  "exports": {
+    ".": {
+      "bun": "./src/index.ts",
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "bin": {
+    "docs-server": "./bin/docs-server.ts"
+  },
+  "scripts": {
+    "dev": "bun run bin/docs-server.ts dev",
+    "build": "bun run bin/docs-server.ts build"
+  },
+  "dependencies": {
+    "@markdoc/markdoc": "^0.5.4",
+    "@zeix/cause-effect": "^0.18.1",
+    "yaml": "^2.8.2"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "typescript": "^5.7.0"
+  },
+  "peerDependencies": {
+    "typescript": ">=5.0.0"
+  }
+}
