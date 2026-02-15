@@ -5,7 +5,7 @@
       "name": "docs-server",
       "dependencies": {
         "@markdoc/markdoc": "^0.5.4",
-        "@zeix/cause-effect": "^0.18.1",
+        "@zeix/cause-effect": "^0.18.2",
         "@zeix/le-truc": "^0.15.0",
         "typedoc": "^0.28.17",
         "typedoc-plugin-markdown": "^4.10.0",
@@ -49,7 +49,7 @@
 
     "@types/unist": ["@types/unist@3.0.3", "", {}, "sha512-ko/gIFJRv177XgZsZcBwnqJN5x/Gien8qNOn0D5bQU/zAzVf9Zt3BlcUiLqhV9y4ARk0GbT3tnUiPNgnTXzc/Q=="],
 
-    "@zeix/cause-effect": ["@zeix/cause-effect@0.18.1", "", { "peerDependencies": { "typescript": "^5.6.3" } }, "sha512-0z0wjbQ5cq9t6NmeF+p9a7Nsi885/EzaOwPn+4nIrdW0qgp9GTOweEDJhz/DvPhXe+50TAAkk3apO/Bct2rP0A=="],
+    "@zeix/cause-effect": ["@zeix/cause-effect@0.18.2", "", { "peerDependencies": { "typescript": "^5.6.3" } }, "sha512-NRCLBo2hCHpIzVVnJrLN/u8wcrIhOqo6ikVThEONNJRRxLaj2Kd0zRIHCKrtLQEVKS3bFb5GtUWrte0xGMNVyA=="],
 
     "@zeix/le-truc": ["@zeix/le-truc@0.15.0", "", { "dependencies": { "@zeix/cause-effect": "^0.16.1" }, "peerDependencies": { "typescript": "^5.9.3" } }, "sha512-D5FjBK9AOshdvfP5tXn5U/wzKuhNJjEWfmQKTpPqRISPHxAU+8CzcENQ+Y8fVsFbjOjw5e4MySGHeh42T4+EaA=="],
 

@@ -10,11 +10,7 @@ import { dirname, join, resolve } from "path";
 import { copyAssets } from "./asset-copier.ts";
 import { bundleComponents, type BundleResult } from "./bundler.ts";
 import type { DocsServerConfig } from "./config.ts";
-import {
-  createFileList,
-  type FileInfo,
-  type WatchedFileList,
-} from "./file-watcher.ts";
+import { createFileList, type FileInfo } from "./file-watcher.ts";
 import { hmrClientScript } from "./hmr-client.ts";
 import {
   generateNavHtml,
@@ -183,82 +179,80 @@ export async function createPipeline(
   const disposables: (() => void)[] = [];
 
   // Terminal effect: write each rendered page to disk
-  //
-  // Read pageDataCollection BEFORE match() so mdFiles is tracked as a
-  // dependency on the first run. See IMPLEMENTATION_NOTES.md §1.
   const disposeWriteEffect = createEffect(() => {
-    // Eagerly read all page data
-    const pages: PageData[] = [];
-    for (const signal of pageDataCollection) {
-      pages.push(signal.get());
-    }
+    match(
+      [
+        layoutTask,
+        bundleTask,
+        assetTask,
+        typedocTask,
+        pageDataCollection,
+      ] as const,
+      {
+        ok: ([layoutHtml, bundle, _assets, apiPages, pages]) => {
+          const allPages = [...pages, ...apiPages];
+          const navPages = allPages.map((p) => ({
+            slug: p.slug,
+            title: p.frontmatter.title || p.slug || "Home",
+          }));
+          const navHtml = generateNavHtml(
+            navPages,
+            config.nav.get(),
+            config.baseUrl.get(),
+          );
 
-    match([layoutTask, bundleTask, assetTask, typedocTask], {
-      ok: ([_layoutHtml, bundle, _assets, _apiPages]) => {
-        const layoutHtml = _layoutHtml as string;
-        const apiPages = _apiPages as PageData[];
-        const allPages = [...pages, ...apiPages];
-        const navPages = allPages.map((p) => ({
-          slug: p.slug,
-          title: p.frontmatter.title || p.slug || "Home",
-        }));
-        const navHtml = generateNavHtml(
-          navPages,
-          config.nav.get(),
-          config.baseUrl.get(),
-        );
+          const bundleResult = bundle;
+          const renderOptions: RenderOptions = {
+            title: config.title.get(),
+            baseUrl: config.baseUrl.get(),
+            navHtml,
+            cssPath: bundleResult.cssPath || undefined,
+            jsPath: bundleResult.jsPath || undefined,
+            isDev: options.watch,
+          };
 
-        const bundleResult = bundle as BundleResult;
-        const renderOptions: RenderOptions = {
-          title: config.title.get(),
-          baseUrl: config.baseUrl.get(),
-          navHtml,
-          cssPath: bundleResult.cssPath || undefined,
-          jsPath: bundleResult.jsPath || undefined,
-          isDev: options.watch,
-        };
+          const writePromises: Promise<void>[] = [];
 
-        const writePromises: Promise<void>[] = [];
+          for (const page of allPages) {
+            let html = renderPage(page, layoutHtml, renderOptions);
 
-        for (const page of allPages) {
-          let html = renderPage(page, layoutHtml, renderOptions);
+            if (options.watch) {
+              html = html.replace("</body>", `${hmrClientScript}\n</body>`);
+            }
 
-          if (options.watch) {
-            html = html.replace("</body>", `${hmrClientScript}\n</body>`);
+            const outPath = pageDataToOutPath(page, outDir);
+            writePromises.push(
+              mkdir(dirname(outPath), { recursive: true })
+                .then(() => Bun.write(outPath, html))
+                .then(() => {
+                  console.log(`  ${page.slug || "index"} → ${outPath}`);
+                }),
+            );
           }
 
-          const outPath = pageDataToOutPath(page, outDir);
-          writePromises.push(
-            mkdir(dirname(outPath), { recursive: true })
-              .then(() => Bun.write(outPath, html))
-              .then(() => {
-                console.log(`  ${page.slug || "index"} → ${outPath}`);
-              }),
-          );
-        }
-
-        Promise.all(writePromises).then(() => {
+          Promise.all(writePromises).then(() => {
+            if (buildResolve) {
+              buildResolve();
+              buildResolve = null;
+            }
+            if (initialBuildDone && options.onPagesWritten) {
+              options.onPagesWritten();
+            }
+            initialBuildDone = true;
+          });
+        },
+        nil: () => {
+          // Waiting for layout/bundle/assets to resolve
+        },
+        err: (errors) => {
+          console.error("Pipeline error:", errors[0]);
           if (buildResolve) {
             buildResolve();
             buildResolve = null;
           }
-          if (initialBuildDone && options.onPagesWritten) {
-            options.onPagesWritten();
-          }
-          initialBuildDone = true;
-        });
+        },
       },
-      nil: () => {
-        // Waiting for layout/bundle/assets to resolve
-      },
-      err: (errors) => {
-        console.error("Pipeline error:", errors[0]);
-        if (buildResolve) {
-          buildResolve();
-          buildResolve = null;
-        }
-      },
-    });
+    );
   });
 
   disposables.push(disposeWriteEffect);
@@ -268,11 +262,9 @@ export async function createPipeline(
       await buildPromise;
     },
     dispose() {
+      // Disposing effects removes all subscribers from the file lists,
+      // which triggers the watched callback's cleanup (closing fs.watch).
       for (const dispose of disposables) dispose();
-      (mdFiles as WatchedFileList).closeWatcher?.();
-      (componentFiles as WatchedFileList).closeWatcher?.();
-      (assetFiles as WatchedFileList).closeWatcher?.();
-      if (tsFiles) (tsFiles as WatchedFileList).closeWatcher?.();
     },
   };
 }

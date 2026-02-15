@@ -1,7 +1,7 @@
 import { createList, type List } from "@zeix/cause-effect";
 import { Glob } from "bun";
 import { createHash } from "crypto";
-import { existsSync, watch, type FSWatcher } from "fs";
+import { existsSync, watch } from "fs";
 import { stat } from "fs/promises";
 import { basename, join } from "path";
 
@@ -13,10 +13,6 @@ export interface FileInfo {
   lastModified: number;
   size: number;
   exists: boolean;
-}
-
-export interface WatchedFileList extends List<FileInfo> {
-  closeWatcher(): void;
 }
 
 const getFileInfo = async (filePath: string): Promise<FileInfo> => {
@@ -66,44 +62,48 @@ export async function createFileList(
 
   const watchEnabled = options?.watch ?? false;
 
+  // File change handler shared between watched callback closure and eager mode
+  const handleFileChange = async (
+    fileList: List<FileInfo>,
+    filename: string,
+  ) => {
+    if (!isMatching(filename)) return;
+
+    const filePath = join(directory, filename);
+    if (!existsSync(filePath)) {
+      fileList.remove(filePath);
+    } else {
+      const fileInfo = await getFileInfo(filePath);
+      const existing = fileList.byKey(filePath);
+      if (existing) {
+        if (existing.get().hash !== fileInfo.hash) existing.set(fileInfo);
+      } else {
+        fileList.add(fileInfo);
+      }
+    }
+  };
+
   const fileList = createList<FileInfo>(initialFiles, {
     keyConfig: (item) => item.path,
+    ...(watchEnabled && dirExists
+      ? {
+          watched: () => {
+            const watcher = watch(
+              directory,
+              {
+                recursive: include.includes("**/"),
+                persistent: true,
+              },
+              async (_event, filename) => {
+                if (!filename) return;
+                await handleFileChange(fileList, filename);
+              },
+            );
+            return () => watcher.close();
+          },
+        }
+      : {}),
   });
 
-  // Start file watcher eagerly when watch mode is enabled.
-  // We use eager fs.watch instead of the List's `watched` callback because
-  // `deriveCollection` does not propagate sink subscriptions back to the
-  // source list's `watched` lifecycle. See IMPLEMENTATION_NOTES.md §1.
-  let watcher: FSWatcher | null = null;
-  if (watchEnabled && dirExists) {
-    watcher = watch(
-      directory,
-      { recursive: include.includes("**/"), persistent: true },
-      async (_event, filename) => {
-        if (!filename || !isMatching(filename)) return;
-
-        const filePath = join(directory, filename);
-        if (!existsSync(filePath)) {
-          fileList.remove(filePath);
-        } else {
-          const fileInfo = await getFileInfo(filePath);
-          const existing = fileList.byKey(filePath);
-          if (existing) {
-            // Only update if content actually changed
-            if (existing.get().hash !== fileInfo.hash) {
-              existing.set(fileInfo);
-            }
-          } else {
-            fileList.add(fileInfo);
-          }
-        }
-      },
-    );
-  }
-
-  // Attach cleanup method for disposal
-  const list = fileList as WatchedFileList;
-  list.closeWatcher = () => watcher?.close();
-
-  return list;
+  return fileList;
 }
