@@ -4,6 +4,7 @@ import {
   match,
   type Store,
 } from "@zeix/cause-effect";
+import { existsSync } from "fs";
 import { mkdir } from "fs/promises";
 import { dirname, join, resolve } from "path";
 import { copyAssets } from "./asset-copier.ts";
@@ -26,6 +27,10 @@ import {
   type PageData,
 } from "./markdoc-pipeline.ts";
 import { resolveSchemas } from "./schema-resolver.ts";
+import {
+  cleanupTypedocMarkdown,
+  generateApiDocs,
+} from "./typedoc-generator.ts";
 
 export interface PipelineOptions {
   watch: boolean;
@@ -54,8 +59,10 @@ export async function createPipeline(
   const outDir = resolve(cwd, config.outDir.get());
   const schemaDir = resolve(cwd, config.schemaDir.get());
   const componentsDir = resolve(cwd, config.componentsDir.get());
+  const typedocSourceDir = resolve(cwd, config.typedocSource.get());
   const builtinSchemaDir = resolve(import.meta.dir, "schemas");
   const isMinified = !options.watch;
+  const hasTypedocSource = existsSync(typedocSourceDir);
 
   // Resolve schemas (built-in + user overrides)
   const schemas: MarkdocSchemaSet = await resolveSchemas(
@@ -79,6 +86,40 @@ export async function createPipeline(
     undefined,
     { watch: options.watch },
   );
+
+  // Watch TS source files for Typedoc (only if source dir exists)
+  const tsFiles = hasTypedocSource
+    ? await createFileList(typedocSourceDir, "**/*.ts", "**/node_modules/**", {
+        watch: options.watch,
+      })
+    : null;
+
+  // Generate API docs from TypeScript source (async Task, debounced by signal deps)
+  const typedocTask = createTask(async (): Promise<PageData[]> => {
+    if (!tsFiles) return [];
+
+    // Read TS file list to track as dependency
+    tsFiles.get();
+
+    console.log("  typedoc: generating API docs...");
+    const apiFiles = await generateApiDocs({
+      sourceDir: typedocSourceDir,
+    });
+
+    if (apiFiles.length === 0) return [];
+
+    // Clean up and process each API markdown file through Markdoc
+    const apiPages: PageData[] = [];
+    for (const file of apiFiles) {
+      const cleaned = cleanupTypedocMarkdown(file.content, file.filename);
+      const cleanedFile: FileInfo = { ...file, content: cleaned };
+      const page = processMarkdoc(cleanedFile, schemas, "");
+      apiPages.push(page);
+    }
+
+    console.log(`  typedoc: ${apiPages.length} API pages generated`);
+    return apiPages;
+  });
 
   // Read layout file (async Task)
   const layoutTask = createTask(async () => {
@@ -152,10 +193,12 @@ export async function createPipeline(
       pages.push(signal.get());
     }
 
-    match([layoutTask, bundleTask, assetTask], {
-      ok: ([_layoutHtml, bundle, _assets]) => {
+    match([layoutTask, bundleTask, assetTask, typedocTask], {
+      ok: ([_layoutHtml, bundle, _assets, _apiPages]) => {
         const layoutHtml = _layoutHtml as string;
-        const navPages = pages.map((p) => ({
+        const apiPages = _apiPages as PageData[];
+        const allPages = [...pages, ...apiPages];
+        const navPages = allPages.map((p) => ({
           slug: p.slug,
           title: p.frontmatter.title || p.slug || "Home",
         }));
@@ -177,7 +220,7 @@ export async function createPipeline(
 
         const writePromises: Promise<void>[] = [];
 
-        for (const page of pages) {
+        for (const page of allPages) {
           let html = renderPage(page, layoutHtml, renderOptions);
 
           if (options.watch) {
@@ -229,6 +272,7 @@ export async function createPipeline(
       (mdFiles as WatchedFileList).closeWatcher?.();
       (componentFiles as WatchedFileList).closeWatcher?.();
       (assetFiles as WatchedFileList).closeWatcher?.();
+      if (tsFiles) (tsFiles as WatchedFileList).closeWatcher?.();
     },
   };
 }

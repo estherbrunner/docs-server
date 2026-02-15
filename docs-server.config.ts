@@ -1,5 +1,5 @@
 export default {
-	title: 'docs-server',
-	baseUrl: '/',
-	nav: ['index', 'getting-started'],
-}
+  title: "docs-server",
+  baseUrl: "/",
+  nav: ["index", "getting-started", "api"],
+};

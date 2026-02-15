@@ -25,6 +25,8 @@
     "@markdoc/markdoc": "^0.5.4",
     "@zeix/cause-effect": "^0.18.1",
     "@zeix/le-truc": "^0.15.0",
+    "typedoc": "^0.28.17",
+    "typedoc-plugin-markdown": "^4.10.0",
     "yaml": "^2.8.2"
   },
   "devDependencies": {

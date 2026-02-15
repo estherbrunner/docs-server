@@ -26,6 +26,11 @@ export {
 } from "./bundler.ts";
 export { copyAssets } from "./asset-copier.ts";
 export {
+  generateApiDocs,
+  cleanupTypedocMarkdown,
+  type TypedocOptions,
+} from "./typedoc-generator.ts";
+export {
   createPipeline,
   type ReactivePipeline,
   type PipelineOptions,

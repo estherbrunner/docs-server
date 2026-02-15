@@ -3,9 +3,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Getting Started — docs-server</title>
+  <title>Interface: DevServer — docs-server</title>
   <link rel="stylesheet" href="/assets/main.9d34ecvx.css">
-  <meta name="description" content="How to set up docs-server for your project">
 </head>
 <body>
   <header>
@@ -80,18 +79,7 @@
 </nav>
   </header>
   <main>
-    <article><h1 id="getting-started">Getting Started</h1><p>Install docs-server as a dev dependency:</p><module-codeblock language="bash"><p class="meta"><span class="language">bash</span></p><pre data-language="bash"><code class="language-bash">bun add -d docs-server
-</code></pre><basic-button class="copy" copy-success="Copied!" copy-error="Error trying to copy to clipboard!"><button type="button" class="secondary small"><span class="label">Copy</span></button></basic-button></module-codeblock><h2 id="configuration">Configuration</h2><p>Create a <code>docs-server.config.ts</code> in your project root:</p><module-codeblock language="typescript"><p class="meta"><span class="language">typescript</span></p><pre data-language="typescript"><code class="language-typescript">export default {
-  title: 'My Library',
-  baseUrl: '/',
-  nav: ['index', 'getting-started'],
-}
-</code></pre><basic-button class="copy" copy-success="Copied!" copy-error="Error trying to copy to clipboard!"><button type="button" class="secondary small"><span class="label">Copy</span></button></basic-button></module-codeblock><h2 id="writing-content">Writing Content</h2><p>Create markdown files in <code>docs-src/</code> with frontmatter:</p><module-codeblock language="markdown"><p class="meta"><span class="language">markdown</span></p><pre data-language="markdown"><code class="language-markdown">---
-title: My Page
----
-
-# My Page Content
-</code></pre><basic-button class="copy" copy-success="Copied!" copy-error="Error trying to copy to clipboard!"><button type="button" class="secondary small"><span class="label">Copy</span></button></basic-button></module-codeblock><h2 id="callouts">Callouts</h2><module-callout type="tip" title="Hot tip"><p>Use <code>bun run dev</code> during development for live reload.</p></module-callout><module-callout type="warning"><p>Make sure your <code>docs-src/layout.html</code> exists before running a build.</p></module-callout></article>
+    <article><p><a href="../README.md"><strong>docs-server</strong></a></p><hr><p><a href="../README.md">docs-server</a> / DevServer</p><h1 id="interface-devserver">Interface: DevServer</h1><h2 id="methods">Methods</h2><h3 id="send">send()</h3><blockquote><p><strong>send</strong>(<code>message</code>): <code>void</code></p></blockquote><h4 id="parameters">Parameters</h4><h5 id="message">message</h5><p><a href="../type-aliases/HMRMessage.md"><code>HMRMessage</code></a></p><h4 id="returns">Returns</h4><p><code>void</code></p><hr><h3 id="stop">stop()</h3><blockquote><p><strong>stop</strong>(): <code>void</code></p></blockquote><h4 id="returns">Returns</h4><p><code>void</code></p></article>
   </main>
   <script type="module" src="/assets/main.aatw794t.js"></script>
 </body>
